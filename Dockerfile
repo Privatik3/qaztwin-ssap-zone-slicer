@@ -47,11 +47,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR $BUILD_DIR
 
-# Copy compressed Blender sources and extract them
-COPY blender.tar.gz $BUILD_DIR/
-RUN tar -xzf $BUILD_DIR/blender.tar.gz -C $BUILD_DIR && \
+# Download compressed Blender sources from GitHub Release and extract them
+RUN wget -q https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partaa -O $BUILD_DIR/blender.tar.gz.partaa && \
+    wget -q https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partab -O $BUILD_DIR/blender.tar.gz.partab && \
+    cat $BUILD_DIR/blender.tar.gz.part* > $BUILD_DIR/blender.tar.gz && \
+    tar -xzf $BUILD_DIR/blender.tar.gz -C $BUILD_DIR && \
     mv $BUILD_DIR/blender $BUILD_DIR/blender-git && \
-    rm $BUILD_DIR/blender.tar.gz
+    rm $BUILD_DIR/blender.tar.gz $BUILD_DIR/blender.tar.gz.part*
 WORKDIR $BUILD_DIR/blender-git
 
 # Install minimal system dependencies via Blender script (no --all to avoid distro mismatches)
