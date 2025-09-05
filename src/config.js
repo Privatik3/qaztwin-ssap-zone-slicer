@@ -18,7 +18,14 @@ function resolveBaseDir(envBaseDir) {
     return path.posix.join("/workspace", envBaseDir.replace(/^\./, ""));
   }
   // If already absolute, keep it
-  if (envBaseDir.startsWith("/")) return envBaseDir;
+  if (envBaseDir.startsWith("/")) {
+    // Check if this is the host path that should be mapped to container path
+    const hostDataPath = "/home/serhii/Projects/qaztwin-ssap-zone-slicer/data";
+    if (envBaseDir === hostDataPath) {
+      return "/workspace/data";
+    }
+    return envBaseDir;
+  }
   // Otherwise, join under /workspace
   return path.posix.join("/workspace", envBaseDir);
 }
