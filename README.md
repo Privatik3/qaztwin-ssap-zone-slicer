@@ -42,7 +42,7 @@ POST http://localhost:5000/zone-preview
 ### Example Request
 
 ```bash
-curl -X POST http://localhost:5000/zone-preview \
+curl -X POST http://localhost:4103/zone-preview \
   -H "Content-Type: application/json" \
   -d '{
     "blockPositionX": 0,

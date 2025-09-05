@@ -26,7 +26,7 @@ function resolveBaseDir(envBaseDir) {
 const BASE_DIR = resolveBaseDir(process.env.BASE_DIR);
 
 const CONFIG = {
-  port: Number(process.env.PORT || 5000),
+  port: Number(process.env.PORT || 4103),
   nodeEnv: process.env.NODE_ENV || "production",
   baseDir: BASE_DIR,
   blenderPath: "/opt/blender/blender",
