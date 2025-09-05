@@ -47,22 +47,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR $BUILD_DIR
 
-# Download Blender sources (multipart) from GitHub Release with retries and integrity check
-RUN set -e; \
-    cd "$BUILD_DIR"; \
-    echo "Downloading Blender archive parts..."; \
-    PART_A_URL="https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partaa"; \
-    PART_B_URL="https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partab"; \
-    curl -fL --retry 5 --retry-delay 5 --retry-connrefused -o blender.tar.gz.partaa "$PART_A_URL"; \
-    curl -fL --retry 5 --retry-delay 5 --retry-connrefused -o blender.tar.gz.partab "$PART_B_URL"; \
-    # Ensure parts are non-empty
-    test -s blender.tar.gz.partaa && test -s blender.tar.gz.partab; \
-    cat blender.tar.gz.partaa blender.tar.gz.partab > blender.tar.gz; \
-    # Validate archive via tar listing to avoid extracting HTML/error pages
-    tar -tzf blender.tar.gz >/dev/null || { echo "Invalid tar.gz archive assembled from parts"; ls -l; exit 2; }; \
-    tar -xzf blender.tar.gz -C "$BUILD_DIR"; \
-    mv "$BUILD_DIR/blender" "$BUILD_DIR/blender-git"; \
-    rm -f "$BUILD_DIR"/blender.tar.gz "$BUILD_DIR"/blender.tar.gz.part*
+# Copy and extract Blender sources from local archive
+COPY blender.tar.gz $BUILD_DIR/blender.tar.gz
+RUN tar -xzf $BUILD_DIR/blender.tar.gz -C $BUILD_DIR && \
+    mv $BUILD_DIR/blender $BUILD_DIR/blender-git && \
+    rm $BUILD_DIR/blender.tar.gz
 WORKDIR $BUILD_DIR/blender-git
 
 # Install minimal system dependencies via Blender script (no --all to avoid distro mismatches)

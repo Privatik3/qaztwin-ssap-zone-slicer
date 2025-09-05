@@ -13,7 +13,6 @@ __pycache__
 # Build artifacts (will be created in container)
 .conda/
 blender/
-blender.tar.gz
 build_linux/
 output/
 data/
