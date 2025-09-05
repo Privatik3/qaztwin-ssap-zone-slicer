@@ -17,8 +17,10 @@ jobs:
         run: |
           curl -L -o blender.tar.gz.partaa https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partaa
           curl -L -o blender.tar.gz.partab https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partab
-          cat blender.tar.gz.partaa blender.tar.gz.partab > blender.tar.gz
-          rm blender.tar.gz.partaa blender.tar.gz.partab
+          curl -L -o blender.tar.gz.partac https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partac
+          curl -L -o blender.tar.gz.partad https://github.com/Privatik3/qaztwin-ssap-zone-slicer/releases/download/v1.0-blender/blender.tar.gz.partad
+          cat blender.tar.gz.partaa blender.tar.gz.partab blender.tar.gz.partac blender.tar.gz.partad > blender.tar.gz
+          rm blender.tar.gz.part*
 
       - name: Set dev environment variables
         run: |
