@@ -65,7 +65,7 @@ jobs:
           echo "Waiting for 'blender-3d-zone-slicer-api' service to become healthy..."
           health=""
           for i in {1..60}; do
-            cid=$(sudo docker compose --project-name qaztwin-ssap-dev ps -q blender-3d-zone-slicer-api)
+            cid=$(sudo docker compose --project-name qaztwin-ssap-dev ps -q blender-api)
             if [ -z "$cid" ]; then
               echo "blender-3d-zone-slicer-api container not found yet; retrying..."
               sleep 5
