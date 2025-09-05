@@ -1,5 +1,6 @@
 services:
   blender-api:
+    # Build configuration for dev environment
     build:
       context: .
       dockerfile: Dockerfile
