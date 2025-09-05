@@ -6,16 +6,19 @@ services:
       cache_from:
         - blender-5.0-alpha-api:latest
     container_name: blender-3d-zone-slicer-api
-    ports:
-      - "${PORT}:${PORT}"
     volumes:
       - ${BASE_DIR}:/workspace/data:rw
       - ./.env:/workspace/.env:ro
     env_file:
       - .env
     environment:
-      - PYTHONUNBUFFERED=1
-      - NODE_ENV=production
+      - PYTHONUNBUFFERED: 1
+      - NODE_ENV: ${NODE_ENV:-production}
+      - PORT: ${PORT:-4103}
+      - BASE_DIR: ${BASE_DIR:-/workspace/data}
+      - PROCESS_TIMEOUT_MS: ${PROCESS_TIMEOUT_MS:-300000}
+    ports:
+      - "${PORT}:${PORT}"
     working_dir: /workspace
     restart: unless-stopped
     healthcheck:
