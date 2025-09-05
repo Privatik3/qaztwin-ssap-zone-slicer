@@ -1,0 +1,65 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  deploy:
+    runs-on: qaztwin-ssap-zone-slicer-runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set dev environment variables
+        run: |
+          rm -f .env
+          touch .env
+          #-------------
+          echo "COMPOSE_NETWORK_NAME=qaztwin-ssap-dev-net" >> .env
+          echo "NODE_ENV=production" >> .env
+          #-------------
+          echo "PORT=4103" >> .env
+          echo "BASE_DIR=/var/www/qaztwin-ssap-backend/dev/models" >> .env
+          echo "PROCESS_TIMEOUT_MS=300000" >> .env
+      - name: Prepare network and host directories (dev)
+        run: |
+          sudo docker network inspect qaztwin-ssap-dev-net >/dev/null 2>&1 || sudo docker network create qaztwin-ssap-dev-net
+
+      - name: Start services
+        run: |
+          sudo docker compose --project-name qaztwin-ssap-dev up --build --force-recreate -d
+
+      # Step 3: Wait until the app service is healthy
+      - name: Wait for blender-3d-zone-slicer-api to be healthy
+        run: |
+          set -e
+          echo "Waiting for 'blender-3d-zone-slicer-api' service to become healthy..."
+          health=""
+          for i in {1..60}; do
+            cid=$(sudo docker compose --project-name qaztwin-ssap-dev ps -q blender-3d-zone-slicer-api)
+            if [ -z "$cid" ]; then
+              echo "blender-3d-zone-slicer-api container not found yet; retrying..."
+              sleep 5
+              continue
+            fi
+            status=$(sudo docker inspect -f '{{.State.Status}}' "$cid")
+            health=$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$cid")
+            echo "blender-3d-zone-slicer-api status=$status health=$health"
+            if [ "$status" = "running" ] && [ "$health" = "healthy" ]; then
+              echo "blender-3d-zone-slicer-api is healthy."
+              break
+            fi
+            sleep 5
+          done
+          if [ "$health" != "healthy" ]; then
+            echo "blender-3d-zone-slicer-api did not become healthy in time"
+            sudo docker compose --project-name qaztwin-ssap-dev ps
+            exit 1
+          fi
+
+      - name: Show deployment info
+        run: |
+          echo "✅ Dev deployment completed!"

@@ -1,0 +1,29 @@
+# Node.js dependencies
+node_modules/
+package-lock.json
+
+# Environment files
+.env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+
+# Build artifacts (will be created in container)
+.conda/
+blender/
+blender.tar.gz
+build_linux/
+output/
+data/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db

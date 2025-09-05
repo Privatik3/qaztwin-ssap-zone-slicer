@@ -1,0 +1,26 @@
+services:
+  blender-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - blender-5.0-alpha-api:latest
+    container_name: blender-3d-zone-slicer-api
+    ports:
+      - "${PORT}:${PORT}"
+    volumes:
+      - ${BASE_DIR}:/workspace/data:rw
+      - ./.env:/workspace/.env:ro
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NODE_ENV=production
+    working_dir: /workspace
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:${PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

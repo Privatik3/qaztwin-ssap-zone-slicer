@@ -1,0 +1,38 @@
+# Git files
+.git
+.gitignore
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Environment files
+.env.example
+
+# Node.js dependencies
+node_modules/
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+
+# Build artifacts (will be created in container)
+.conda/
+blender/
+build_linux/
+output/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Git
+.github
+.gitignore
