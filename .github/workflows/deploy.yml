@@ -52,7 +52,7 @@ jobs:
           echo "PROCESS_TIMEOUT_MS=300000" >> .env
       - name: Prepare network and host directories (dev)
         run: |
-          docker network inspect qaztwin-ssap-main-net >/main/null 2>&1 || docker network create qaztwin-ssap-main-net
+          docker network inspect qaztwin-ssap-main-net >/dev/null 2>&1 || docker network create qaztwin-ssap-main-net
 
       - name: Start services
         run: |
