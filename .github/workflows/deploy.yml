@@ -92,4 +92,4 @@ jobs:
           echo "🌐 Service URL: http://localhost:${PORT}"
           echo "🔍 Health check: http://localhost:${PORT}/health"
           echo "📊 Container status:"
-          sudo docker compose --project-name qaztwin-ssap-dev ps
+          docker compose --project-name qaztwin-ssap-main ps
