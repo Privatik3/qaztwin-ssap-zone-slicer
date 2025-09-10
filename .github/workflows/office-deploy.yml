@@ -1,4 +1,4 @@
-name: Deploy to Dev Environment
+name: Deploy to Office server Environment
 
 on:
   push:
@@ -39,7 +39,7 @@ jobs:
             rm blender.tar.gz.part*
           fi
 
-      - name: Set dev environment variables
+      - name: Set office environment variables
         run: |
           rm -f .env
           touch .env
@@ -50,6 +50,7 @@ jobs:
           echo "PORT=4103" >> .env
           echo "BASE_DIR=/var/www/qaztwin-ssap-backend/main/models" >> .env
           echo "PROCESS_TIMEOUT_MS=300000" >> .env
+          echo "LOCK_TIMEOUT_MS=600000" >> .env
       - name: Prepare network and host directories (dev)
         run: |
           docker network inspect qaztwin-ssap-main-net >/dev/null 2>&1 || docker network create qaztwin-ssap-main-net
@@ -88,7 +89,7 @@ jobs:
 
       - name: Show deployment info
         run: |
-          echo "✅ Dev deployment completed!"
+          echo "✅ Office deployment completed!"
           echo "🌐 Service URL: http://localhost:${PORT}"
           echo "🔍 Health check: http://localhost:${PORT}/health"
           echo "📊 Container status:"

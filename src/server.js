@@ -5,14 +5,24 @@ const cors = require("cors");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 const CONFIG = require("./config");
+const LockManager = require("./lock-manager");
 
 const app = express();
 const PORT = CONFIG.port;
 
-// Global flag to prevent multiple processes from running simultaneously
-let isProcessing = false;
+// Initialize lock manager
+const lockManager = new LockManager();
+
+// Periodic lock cleanup (every 5 minutes)
+const LOCK_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const lockCleanupTimer = setInterval(() => {
+  try {
+    lockManager.periodicCleanup();
+  } catch (error) {
+    console.log(`❌ Error during periodic lock cleanup: ${error.message}`);
+  }
+}, LOCK_CLEANUP_INTERVAL);
 
 // Middleware
 app.use(cors());
@@ -116,65 +126,6 @@ function ensureDirectoryExists(filePath) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
   fs.mkdirSync(dir, { recursive: true });
-}
-
-// Concurrency control via lock file in BASE_DIR
-function getLockFilePath() {
-  return path.join(BASE_DIR, ".processing.lock");
-}
-
-function isPidAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-function acquireLock() {
-  const lockPath = getLockFilePath();
-  const payload = {
-    pid: process.pid,
-    startedAt: new Date().toISOString(),
-    host: os.hostname(),
-  };
-  try {
-    const fd = fs.openSync(lockPath, "wx");
-    fs.writeFileSync(fd, JSON.stringify(payload, null, 2));
-    fs.closeSync(fd);
-    return true;
-  } catch (err) {
-    if (err && err.code === "EEXIST") {
-      try {
-        const text = fs.readFileSync(lockPath, "utf8");
-        const info = JSON.parse(text);
-        if (info && typeof info.pid === "number" && isPidAlive(info.pid)) {
-          return false;
-        }
-        // Stale lock, remove and retry once
-        fs.rmSync(lockPath, { force: true });
-        const fd = fs.openSync(lockPath, "wx");
-        fs.writeFileSync(fd, JSON.stringify(payload, null, 2));
-        fs.closeSync(fd);
-        return true;
-      } catch (_e) {
-        return false;
-      }
-    }
-    return false;
-  }
-}
-
-function releaseLock() {
-  const lockPath = getLockFilePath();
-  try {
-    if (fs.existsSync(lockPath)) {
-      fs.rmSync(lockPath, { force: true });
-    }
-  } catch (_e) {
-    // noop
-  }
 }
 
 // Main processing function
@@ -319,7 +270,7 @@ app.get("/health", (req, res) => {
 app.post("/zone-preview", async (req, res) => {
   try {
     // Check if another process is already running
-    if (isProcessing) {
+    if (!lockManager.canProcess()) {
       return res.status(409).json({
         success: false,
         error:
@@ -356,7 +307,7 @@ app.post("/zone-preview", async (req, res) => {
     console.log(`${"-".repeat(60)}`);
 
     // Attempt to acquire lock (filesystem + in-memory)
-    const lockAcquired = acquireLock();
+    const lockAcquired = lockManager.acquireLock();
     if (!lockAcquired) {
       console.log(`🚫 BUSY: Service busy, rejecting ${params.inputFileName}`);
       console.log(`${"=".repeat(60)}`);
@@ -368,7 +319,7 @@ app.post("/zone-preview", async (req, res) => {
     }
 
     // Set processing flag after acquiring lock
-    isProcessing = true;
+    lockManager.setProcessing(true);
 
     try {
       // Process the 3D model
@@ -381,15 +332,15 @@ app.post("/zone-preview", async (req, res) => {
       });
     } finally {
       // Always clear flags/locks
-      isProcessing = false;
-      releaseLock();
+      lockManager.setProcessing(false);
+      lockManager.releaseLock();
     }
   } catch (error) {
     console.log(`💥 PROCESSING ERROR: ${error.message}`);
     console.log(`${"=".repeat(60)}`);
     // Reset the processing flag on error
-    isProcessing = false;
-    releaseLock();
+    lockManager.setProcessing(false);
+    lockManager.releaseLock();
     res.status(500).json({
       success: false,
       error: error.message,
@@ -418,18 +369,36 @@ app.use("*", (req, res) => {
 });
 
 // Graceful shutdown
-process.on("SIGINT", () => {
-  console.log("\n⚠️ Received SIGINT, shutting down gracefully...");
+function gracefulShutdown(signal) {
+  console.log(`\n⚠️ Received ${signal}, shutting down gracefully...`);
+  try {
+    lockManager.setProcessing(false);
+    lockManager.releaseLock();
+  } catch (_e) {}
+  try {
+    clearInterval(lockCleanupTimer);
+  } catch (_e) {}
   process.exit(0);
-});
+}
 
-process.on("SIGTERM", () => {
-  console.log("\n⚠️ Received SIGTERM, shutting down gracefully...");
-  process.exit(0);
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+
+// Defensive: capture unhandled errors to ensure lock is released
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException:", err);
+  gracefulShutdown("uncaughtException");
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
+  gracefulShutdown("unhandledRejection");
 });
 
 // Start server
 app.listen(PORT, "0.0.0.0", () => {
+  // Cleanup any orphaned locks from previous runs
+  lockManager.cleanupOrphanedLocks();
+
   console.log("🚀 3D Zone Slicer API Server Started");
   console.log("=".repeat(50));
   console.log(`📡 Server listening on port ${PORT}`);
@@ -437,6 +406,11 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🏥 Health check: http://0.0.0.0:${PORT}/health`);
   console.log(
     `🎯 Processing endpoint: POST http://0.0.0.0:${PORT}/zone-preview`
+  );
+  console.log(`🔒 Automatic lock management enabled`);
+  console.log(`⏰ Lock timeout: ${lockManager.LOCK_TIMEOUT_MS / 1000}s`);
+  console.log(
+    `🔄 Periodic cleanup: every ${LOCK_CLEANUP_INTERVAL / 1000 / 60} minutes`
   );
   console.log("=".repeat(50));
 });

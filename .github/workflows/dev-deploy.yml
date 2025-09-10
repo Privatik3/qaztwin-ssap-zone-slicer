@@ -50,6 +50,7 @@ jobs:
           echo "PORT=4103" >> .env
           echo "BASE_DIR=/var/www/qaztwin-ssap-backend/dev/models" >> .env
           echo "PROCESS_TIMEOUT_MS=300000" >> .env
+          echo "LOCK_TIMEOUT_MS=600000" >> .env
       - name: Prepare network and host directories (dev)
         run: |
           sudo docker network inspect qaztwin-ssap-dev-net >/dev/null 2>&1 || sudo docker network create qaztwin-ssap-dev-net
