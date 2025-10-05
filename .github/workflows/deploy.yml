@@ -1,4 +1,4 @@
-name: Deploy to Production (office)
+name: Deploy to Office server Environment
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: qaztwin-ssap-zone-slicer-office-local-runner
+    runs-on: qaztwin-ssap-zone-slicer-office-runner
 
     steps:
       - name: Preserve existing Blender archive
@@ -39,25 +39,25 @@ jobs:
             rm blender.tar.gz.part*
           fi
 
-      - name: Set dev environment variables
+      - name: Set office environment variables
         run: |
           rm -f .env
           touch .env
           #-------------
-          echo "COMPOSE_NETWORK_NAME=qaztwin-ssap-dev-net" >> .env
+          echo "COMPOSE_NETWORK_NAME=qaztwin-ssap-main-net" >> .env
           echo "NODE_ENV=production" >> .env
           #-------------
           echo "PORT=4103" >> .env
-          echo "BASE_DIR=/var/www/qaztwin-ssap-backend/dev/models" >> .env
+          echo "BASE_DIR=/var/www/qaztwin-ssap-backend/main/models" >> .env
           echo "PROCESS_TIMEOUT_MS=300000" >> .env
           echo "LOCK_TIMEOUT_MS=600000" >> .env
       - name: Prepare network and host directories (dev)
         run: |
-          sudo docker network inspect qaztwin-ssap-dev-net >/dev/null 2>&1 || sudo docker network create qaztwin-ssap-dev-net
+          docker network inspect qaztwin-ssap-main-net >/dev/null 2>&1 || docker network create qaztwin-ssap-main-net
 
       - name: Start services
         run: |
-          sudo docker compose --project-name qaztwin-ssap-dev up --build --force-recreate -d
+          docker compose --project-name qaztwin-ssap-main up --build --force-recreate -d
 
       # Step 3: Wait until the app service is healthy
       - name: Wait for blender-3d-zone-slicer-api to be healthy
@@ -66,14 +66,14 @@ jobs:
           echo "Waiting for 'blender-3d-zone-slicer-api' service to become healthy..."
           health=""
           for i in {1..60}; do
-            cid=$(sudo docker compose --project-name qaztwin-ssap-dev ps -q blender-api)
+            cid=$(docker compose --project-name qaztwin-ssap-main ps -q blender-api)
             if [ -z "$cid" ]; then
               echo "blender-3d-zone-slicer-api container not found yet; retrying..."
               sleep 5
               continue
             fi
-            status=$(sudo docker inspect -f '{{.State.Status}}' "$cid")
-            health=$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$cid")
+            status=$(docker inspect -f '{{.State.Status}}' "$cid")
+            health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$cid")
             echo "blender-3d-zone-slicer-api status=$status health=$health"
             if [ "$status" = "running" ] && [ "$health" = "healthy" ]; then
               echo "blender-3d-zone-slicer-api is healthy."
@@ -83,14 +83,14 @@ jobs:
           done
           if [ "$health" != "healthy" ]; then
             echo "blender-3d-zone-slicer-api did not become healthy in time"
-            sudo docker compose --project-name qaztwin-ssap-dev ps
+            docker compose --project-name qaztwin-ssap-main ps
             exit 1
           fi
 
-      - name: Show deployment info (Office)
+      - name: Show deployment info
         run: |
-          echo "✅ Production (office) deployment completed!"
+          echo "✅ Office deployment completed!"
           echo "🌐 Service URL: http://localhost:${PORT}"
           echo "🔍 Health check: http://localhost:${PORT}/health"
           echo "📊 Container status:"
-          sudo docker compose --project-name qaztwin-ssap-dev ps
+          docker compose --project-name qaztwin-ssap-main ps
