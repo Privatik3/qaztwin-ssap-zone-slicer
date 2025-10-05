@@ -53,11 +53,11 @@ jobs:
           echo "LOCK_TIMEOUT_MS=600000" >> .env
       - name: Prepare network and host directories (dev)
         run: |
-          sudo docker network inspect qaztwin-ssap-dev-net >/dev/null 2>&1 || sudo docker network create qaztwin-ssap-dev-net
+          docker network inspect qaztwin-ssap-dev-net >/dev/null 2>&1 || docker network create qaztwin-ssap-dev-net
 
       - name: Start services
         run: |
-          sudo docker compose --project-name qaztwin-ssap-dev up --build --force-recreate -d
+          docker compose --project-name qaztwin-ssap-dev up --build --force-recreate -d
 
       # Step 3: Wait until the app service is healthy
       - name: Wait for blender-3d-zone-slicer-api to be healthy
@@ -66,14 +66,14 @@ jobs:
           echo "Waiting for 'blender-3d-zone-slicer-api' service to become healthy..."
           health=""
           for i in {1..60}; do
-            cid=$(sudo docker compose --project-name qaztwin-ssap-dev ps -q blender-api)
+            cid=$(docker compose --project-name qaztwin-ssap-dev ps -q blender-api)
             if [ -z "$cid" ]; then
               echo "blender-3d-zone-slicer-api container not found yet; retrying..."
               sleep 5
               continue
             fi
-            status=$(sudo docker inspect -f '{{.State.Status}}' "$cid")
-            health=$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$cid")
+            status=$(docker inspect -f '{{.State.Status}}' "$cid")
+            health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$cid")
             echo "blender-3d-zone-slicer-api status=$status health=$health"
             if [ "$status" = "running" ] && [ "$health" = "healthy" ]; then
               echo "blender-3d-zone-slicer-api is healthy."
@@ -83,7 +83,7 @@ jobs:
           done
           if [ "$health" != "healthy" ]; then
             echo "blender-3d-zone-slicer-api did not become healthy in time"
-            sudo docker compose --project-name qaztwin-ssap-dev ps
+            docker compose --project-name qaztwin-ssap-dev ps
             exit 1
           fi
 
@@ -93,4 +93,4 @@ jobs:
           echo "🌐 Service URL: http://localhost:${PORT}"
           echo "🔍 Health check: http://localhost:${PORT}/health"
           echo "📊 Container status:"
-          sudo docker compose --project-name qaztwin-ssap-dev ps
+          docker compose --project-name qaztwin-ssap-dev ps
