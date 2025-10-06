@@ -48,7 +48,7 @@ jobs:
           echo "NODE_ENV=production" >> .env
           #-------------
           echo "PORT=4103" >> .env
-          echo "BASE_DIR=/var/www/qaztwin-ssap-backend/dev/models" >> .env
+          echo "BASE_DIR=/home/serhii/Public/models/models" >> .env
           echo "PROCESS_TIMEOUT_MS=300000" >> .env
           echo "LOCK_TIMEOUT_MS=600000" >> .env
       - name: Prepare network and host directories (dev)
