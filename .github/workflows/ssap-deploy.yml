@@ -1,9 +1,9 @@
-name: Deploy to Office server Environment
+name: Deploy to Production (SSAP)
 
 on:
   push:
     branches:
-      - dev
+      - ssap
 
 jobs:
   deploy:
