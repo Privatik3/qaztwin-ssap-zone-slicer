@@ -87,10 +87,6 @@ jobs:
             exit 1
           fi
 
-      - name: Connect to custom network
-        run: |
-          docker network connect qaztwin-ssap-main-net blender-3d-zone-slicer-api
-
       - name: Show deployment info
         run: |
           echo "✅ Office deployment completed!"
