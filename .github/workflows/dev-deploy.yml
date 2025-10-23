@@ -39,7 +39,7 @@ jobs:
             rm blender.tar.gz.part*
           fi
 
-      name: Set Production (PS) environment variables
+      - name: Set Production (PS) environment variables
         run: |
           rm -f .env
           touch .env
