@@ -23,10 +23,11 @@ ENV BUILD_DIR=/build
 
 # Workaround intermittent DNS resolution failures in some build environments
 # Ensure reliable resolvers before any network operations
-RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /etc/resolv.conf || true
+RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 208.67.222.222\n" > /etc/resolv.conf || true
 
-# Install basic dependencies (cached layer)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install basic dependencies (cached layer) with better error handling
+RUN apt-get update --fix-missing && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     git \
@@ -42,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ccache \
     pkg-config \
     sudo \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -55,13 +57,13 @@ RUN tar -xzf $BUILD_DIR/blender.tar.gz -C $BUILD_DIR && \
 WORKDIR $BUILD_DIR/blender-git
 
 # Install minimal system dependencies via Blender script (no --all to avoid distro mismatches)
-RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /etc/resolv.conf || true && \
-    apt-get update && \
+RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 208.67.222.222\n" > /etc/resolv.conf || true && \
+    apt-get update --fix-missing && \
     python3 build_files/build_environment/install_linux_packages.py || true
 
 # Update and download precompiled libraries (cached layer)
 # Download precompiled libraries (recommended path) only if missing
-RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /etc/resolv.conf || true && \
+RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 208.67.222.222\n" > /etc/resolv.conf || true && \
     if [ ! -d lib/linux_x64 ]; then \
       echo "Precompiled libs missing, running make update"; \
       make update; \
