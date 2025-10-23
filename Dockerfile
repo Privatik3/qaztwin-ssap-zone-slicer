@@ -23,7 +23,6 @@ ENV BUILD_DIR=/build
 
 # Workaround intermittent DNS resolution failures in some build environments
 # Ensure reliable resolvers before any network operations
-RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 208.67.222.222\n" > /etc/resolv.conf || true
 
 # Install basic dependencies (cached layer) with better error handling
 RUN apt-get update --fix-missing && \
@@ -46,6 +45,16 @@ RUN apt-get update --fix-missing && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Prevent service starts during package installs to avoid hangs
+RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d && \
+    ln -sf /bin/true /usr/bin/systemctl && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      patch \
+      cmake-curses-gui \
+      cmake-gui \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR $BUILD_DIR
 
@@ -57,19 +66,10 @@ RUN tar -xzf $BUILD_DIR/blender.tar.gz -C $BUILD_DIR && \
 WORKDIR $BUILD_DIR/blender-git
 
 # Install minimal system dependencies via Blender script (no --all to avoid distro mismatches)
-RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 208.67.222.222\n" > /etc/resolv.conf || true && \
-    apt-get update --fix-missing && \
-    python3 build_files/build_environment/install_linux_packages.py || true
+RUN timeout 1800 python3 build_files/build_environment/install_linux_packages.py || true
 
 # Update and download precompiled libraries (cached layer)
 # Download precompiled libraries (recommended path) only if missing
-RUN printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 208.67.222.222\n" > /etc/resolv.conf || true && \
-    if [ ! -d lib/linux_x64 ]; then \
-      echo "Precompiled libs missing, running make update"; \
-      make update; \
-    else \
-      echo "Precompiled libs found, skipping make update"; \
-    fi
 
 # Build Blender (this takes the longest, cached when possible)
 RUN make ccache
