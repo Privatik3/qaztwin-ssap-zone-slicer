@@ -29,8 +29,16 @@ TEXTURE_TARGET_RESOLUTION = int(os.getenv('TEXTURE_TARGET_RESOLUTION', '4096'))
 
 # Block extraction settings
 ENABLE_BLOCK_CUTTING = os.getenv('ENABLE_BLOCK_CUTTING', 'true').lower() == 'true'
-BLOCK_POSITION_X = float(os.getenv('BLOCK_POSITION_X', '0'))      # X position relative to mesh center
-BLOCK_POSITION_Y = float(os.getenv('BLOCK_POSITION_Y', '0'))     # Y position relative to mesh center
+BLOCK_POSITION_X = float(os.getenv('BLOCK_POSITION_X', '0'))      # X of the block centre, world coords
+BLOCK_POSITION_Y = float(os.getenv('BLOCK_POSITION_Y', '0'))      # Y of the block centre, world coords
+# Deployment-level shift of every block, mirroring the frontend's VITE_WORK_ZONE_BOX_OFFSET
+# (used when the work-zone coordinates in the DB predate the current source.glb).
+# X maps 1:1; Y is the NEGATED three.js Z, so VITE_..._OFFSET_Z=-4 means BLOCK_OFFSET_Y=+4.
+BLOCK_OFFSET_X = float(os.getenv('BLOCK_OFFSET_X', '0'))
+BLOCK_OFFSET_Y = float(os.getenv('BLOCK_OFFSET_Y', '0'))
+# Some exports (DJI Terra) carry the WRONG sign of the Y-up axis conversion in their root nodes and
+# render upside down; the viewer fixes that with rotation.x = PI. Set this when the viewer does.
+MODEL_FLIP_X = os.getenv('MODEL_FLIP_X', 'false').lower() == 'true'
 BLOCK_SIZE_X = float(os.getenv('BLOCK_SIZE_X', '20'))          # X dimension of block
 BLOCK_SIZE_Y = float(os.getenv('BLOCK_SIZE_Y', '20'))          # Y dimension of block
 BLOCK_ROTATION_Z = float(os.getenv('BLOCK_ROTATION_Z', '45'))      # Rotation around Z-axis in degrees
@@ -61,7 +69,30 @@ def import_glb_file(file_path):
 
     mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
     if mesh_objects:
-        obj = mesh_objects[0]
+        # A photogrammetry export arrives as many tiled meshes, and the glTF importer keeps the
+        # Y-up -> Z-up conversion on the PARENT nodes (the meshes' own transforms are identity, so
+        # transform_apply alone is a no-op). The cuts below run on local mesh data of ONE object,
+        # so without this both the axes and the coverage are wrong.
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in mesh_objects:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = mesh_objects[0]
+        bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True, isolate_users=True)
+        if len(mesh_objects) > 1:
+            bpy.ops.object.join()
+            print(f"JOIN: {len(mesh_objects)} meshes -> 1")
+        obj = bpy.context.view_layer.objects.active
+        # Put the mesh in the same frame the viewer shows, because the block coordinates are the
+        # ones the UI used to place its box: undo the wrong-signed axis conversion if the viewer
+        # does (a three.js 180 deg turn about X is the same about X here), then centre in XY the
+        # way the viewer centres in XZ. Z (height) is left alone — the block spans it whole.
+        if MODEL_FLIP_X:
+            obj.data.transform(mathutils.Matrix.Rotation(math.pi, 4, 'X'))
+        center, _ = get_mesh_center_and_dimensions(obj)
+        obj.data.transform(mathutils.Matrix.Translation((-center.x, -center.y, 0)))
+        obj.data.update()
+        print(f"FRAME: flip_x={MODEL_FLIP_X} centred by {(-round(center.x, 2), -round(center.y, 2))}")
         print(f"MESH: {len(obj.data.vertices):,} vertices, {len(obj.data.polygons):,} faces")
         return obj
     return None
@@ -142,31 +173,20 @@ def export_glb_optimized(obj, output_path):
         return None
 
 def get_mesh_center_and_dimensions(obj):
-    """Calculate the center point and dimensions of the mesh bounding box"""
-    bbox = obj.bound_box
-    center = mathutils.Vector((0, 0, 0))
+    """Centre and dimensions of the mesh bounding box, straight from the vertices.
 
+    obj.bound_box is a cached value that does NOT refresh until the depsgraph re-evaluates, so it
+    lies right after the mesh data is transformed in place — which is exactly when it is read here.
+    """
     min_corner = mathutils.Vector((float('inf'), float('inf'), float('inf')))
     max_corner = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
 
-    for point in bbox:
-        center += mathutils.Vector(point)
-        min_corner.x = min(min_corner.x, point[0])
-        min_corner.y = min(min_corner.y, point[1])
-        min_corner.z = min(min_corner.z, point[2])
-        max_corner.x = max(max_corner.x, point[0])
-        max_corner.y = max(max_corner.y, point[1])
-        max_corner.z = max(max_corner.z, point[2])
+    for vert in obj.data.vertices:
+        for i in range(3):
+            min_corner[i] = min(min_corner[i], vert.co[i])
+            max_corner[i] = max(max_corner[i], vert.co[i])
 
-    center /= 8  # Average of 8 bounding box points
-    dimensions = max_corner - min_corner
-
-    return center, dimensions
-
-def get_mesh_center(obj):
-    """Calculate the center point of the mesh bounding box (legacy function)"""
-    center, _ = get_mesh_center_and_dimensions(obj)
-    return center
+    return (min_corner + max_corner) / 2, max_corner - min_corner
 
 def rotate_mesh_about_point(obj, pivot, rot_matrix):
     """Rotate mesh vertices around a pivot point."""
@@ -190,13 +210,22 @@ def rotate_mesh_about_point(obj, pivot, rot_matrix):
     obj.data.update()
 
 def extract_specific_block(obj, pos_x, pos_y, size_x, size_y, rot_z):
-    """Extract a rotated block by rotating the mesh around Z-axis, performing axis-aligned cuts"""
-    # Calculate mesh center and dimensions
-    mesh_center, mesh_dimensions = get_mesh_center_and_dimensions(obj)
-    size_z = mesh_dimensions.z  # Full mesh height
-    pos_z = 0  # Always use mesh center for Z position
+    """Extract a rotated block.
 
-    print(f"BLOCK: Pos({pos_x},{pos_y}) Size({size_x}x{size_y}) RotZ({rot_z})")
+    pos_x / pos_y are the ABSOLUTE world coordinates of the block centre — the same placement the
+    UI uses for the box mesh (three.js x -> x, three.js z -> -y), NOT an offset from the mesh
+    centre. rot_z is the yaw the UI applies, in degrees; a +yaw about three.js Y is a +rotation
+    about Blender Z, so the mesh is turned by -rot_z to make the block axis aligned. Rotating about
+    the block centre itself keeps the pivot out of the arithmetic.
+    """
+    mesh_center, mesh_dimensions = get_mesh_center_and_dimensions(obj)
+    size_z = mesh_dimensions.z  # Full mesh height — the caller has no Z inputs
+
+    block_center_x = pos_x + BLOCK_OFFSET_X
+    block_center_y = pos_y + BLOCK_OFFSET_Y
+    block_center_z = mesh_center.z
+
+    print(f"BLOCK: World({block_center_x},{block_center_y}) Size({size_x}x{size_y}) RotZ({rot_z})")
 
     # Ensure the object is single-user
     if obj.data.users > 1:
@@ -205,19 +234,11 @@ def extract_specific_block(obj, pos_x, pos_y, size_x, size_y, rot_z):
     original_verts = len(obj.data.vertices)
 
     # Rotate the mesh around Z-axis
-    pivot_center = get_mesh_center(obj)
-    rotation_euler = mathutils.Euler((0, 0, math.radians(rot_z)), 'XYZ')
+    pivot_center = mathutils.Vector((block_center_x, block_center_y, block_center_z))
+    rotation_euler = mathutils.Euler((0, 0, math.radians(-rot_z)), 'XYZ')
     rotation_matrix = rotation_euler.to_matrix().to_4x4()
 
     rotate_mesh_about_point(obj, pivot_center, rotation_matrix)
-
-    # Perform axis-aligned cuts on the rotated mesh
-    mesh_center = get_mesh_center(obj)
-
-    # Calculate absolute coordinates for cutting box
-    block_center_x = mesh_center.x + pos_x
-    block_center_y = mesh_center.y + pos_y
-    block_center_z = mesh_center.z + pos_z
 
     block_min_x = block_center_x - size_x / 2
     block_max_x = block_center_x + size_x / 2

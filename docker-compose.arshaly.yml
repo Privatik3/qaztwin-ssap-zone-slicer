@@ -1,0 +1,42 @@
+services:
+    blender-api:
+        build:
+            context: .
+            dockerfile: Dockerfile.arshaly
+        container_name: blender-3d-zone-slicer-api
+        # Same host dir the backend mounts as /app/models (HOST_MODELS_DIR in arshaly-deploy.yml).
+        volumes:
+            - /var/www/qaztwin-ssap-backend/arshaly/models:/workspace/data:rw
+        environment:
+            - NODE_ENV=production
+            - PORT=4103
+            - BASE_DIR=/workspace/data
+            - PROCESS_TIMEOUT_MS=300000
+            - LOCK_TIMEOUT_MS=600000
+            # Mirrors the frontend's VITE_WORK_ZONE_BOX_OFFSET default (83, 0, -4): the work-zone
+            # coordinates in the restored DB predate this source.glb, and the UI draws every box
+            # inside a group shifted by it. Y is the negated three.js Z, hence +4. Set both to 0
+            # once the offset is baked into the DB (and drop it in the frontend at the same time).
+            - BLOCK_OFFSET_X=83
+            - BLOCK_OFFSET_Y=4
+            # This source.glb is a DJI Terra export with the wrong-signed axis conversion; the
+            # viewer fixes it with rotation.x = PI (main/components/Model.tsx), so the cuts must too.
+            - MODEL_FLIP_X=true
+        # Loopback only — the backend reaches it over qaztwin-ssap-arshaly-net as `blender-api`.
+        ports:
+            - "127.0.0.1:4103:4103"
+        working_dir: /workspace
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://127.0.0.1:4103/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+        networks:
+            - ssap
+
+networks:
+    ssap:
+        external: true
+        name: qaztwin-ssap-arshaly-net

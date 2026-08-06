@@ -1,0 +1,29 @@
+# Slim build for the arshaly mini-PC.
+# The upstream Dockerfile compiles Blender from source (3.6 GB release archive + `make -j$(nproc)`),
+# which this box cannot afford. src/server.js only spawns /opt/blender/blender with scripts/box_cut.py,
+# and box_cut.py uses plain stable bpy — so the official Blender build is a drop-in.
+FROM node:22-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    BLENDER_PATH=/opt/blender/blender \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl ca-certificates xz-utils \
+      libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG BLENDER_VERSION=5.0.1
+RUN curl -fL "https://download.blender.org/release/Blender5.0/blender-${BLENDER_VERSION}-linux-x64.tar.xz" \
+      | tar -xJ -C /opt \
+    && mv "/opt/blender-${BLENDER_VERSION}-linux-x64" /opt/blender \
+    && /opt/blender/blender --version
+
+WORKDIR /workspace
+COPY package.json ./
+RUN npm install --omit=dev && npm cache clean --force
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+RUN mkdir -p /workspace/data
+
+CMD ["node", "src/server.js"]
